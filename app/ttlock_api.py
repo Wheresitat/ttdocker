@@ -93,28 +93,18 @@ def get_access_token(base_url: str, client_id: str, client_secret: str,
     return body
 
 
-def list_locks(base_url: str, access_token: str,
+def list_locks(base_url: str, client_id: str, access_token: str,
                page_no: int = 1, page_size: int = 100) -> dict:
     """
     /v3/lock/list
 
-    Returns:
-    {
-      "list": [
-        {
-          "lockId": 123456,
-          "lockAlias": "Front Door",
-          "electricQuantity": 95,
-          ...
-        },
-        ...
-      ]
-    }
+    Requires: clientId, accessToken, pageNo, pageSize, date
     """
     url = _build_url(base_url, "/v3/lock/list")
     now_ms = int(time.time() * 1000)
 
     data = {
+        "clientId": client_id,
         "accessToken": access_token,
         "pageNo": page_no,
         "pageSize": page_size,
@@ -144,10 +134,12 @@ def list_locks(base_url: str, access_token: str,
     return body
 
 
-def operate_lock(base_url: str, access_token: str,
+def operate_lock(base_url: str, client_id: str, access_token: str,
                  lock_id: int, action: str) -> dict:
     """
     /v3/lock/lock or /v3/lock/unlock
+
+    Requires: clientId, accessToken, lockId, date
     """
     action = action.lower()
     if action not in ("lock", "unlock"):
@@ -158,6 +150,7 @@ def operate_lock(base_url: str, access_token: str,
     now_ms = int(time.time() * 1000)
 
     data = {
+        "clientId": client_id,
         "accessToken": access_token,
         "lockId": int(lock_id),
         "date": str(now_ms),
