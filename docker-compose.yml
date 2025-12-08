@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  ttlock-helper:
+    build: .
+    container_name: ttlock-helper
+    ports:
+      - "8005:8000"        # http://host:8005
+    environment:
+      - TZ=Australia/Sydney
+      - CONFIG_PATH=/data/config.json
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
