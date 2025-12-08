@@ -1,3 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TTLock Helper UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <h1 class="mb-4">TTLock Helper UI</h1>
+  <p class="text-muted">
+    Follow the steps in order, or use the shortcut if you already have credentials.
+    If anything fails, check the log at the bottom and paste relevant lines back here.
+  </p>
+
+  <!-- SHORTCUT: Already have username / password / token -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Shortcut – Already have username, password and access token?
+    </div>
+    <div class="card-body">
+      <p>
+        If you already created a TTLock app user and have the login details and/or an access token
+        (from another tool, script, or previous setup), you can paste them here and jump straight
+        to <strong>Step 5 (Fetch locks)</strong> and <strong>Step 6 (Control locks)</strong>.
+      </p>
+      <p class="mb-3">
+        This will <em>not</em> try to re-register the user. It simply saves your credentials into
+        this helper and, if you provide an access token, verifies it by fetching the lock list.
+      </p>
+
+      <form method="post" action="/fast_setup" class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">API Base URL</label>
+          <input type="text" class="form-control" name="fast_api_base_url"
+                 value="{{ cfg.api_base_url }}">
+          <div class="form-text">
+            Usually <code>https://api.ttlock.com</code>.
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Username (full TTLock username)</label>
+          <input type="text" class="form-control" name="fast_username"
+                 value="{{ cfg.username }}">
+          <div class="form-text">
+            Example: <code>ccajg_higgson2025</code>.
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Plain password (optional)</label>
+          <input type="password" class="form-control" name="fast_plain_password">
+          <div class="form-text">
+            If you provide this, the helper will derive the MD5 hash automatically.
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Password (MD5) (optional)</label>
+          <input type="text" class="form-control" name="fast_password_md5"
+                 value="{{ cfg.password_md5 }}">
+          <div class="form-text">
+            If you already know the MD5 hash, paste it here. If both plain and MD5 are given, plain wins.
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Access token (optional, recommended)</label>
+          <input type="text" class="form-control" name="fast_access_token"
+                 value="{{ cfg.access_token }}">
+          <div class="form-text">
+            If provided, the helper will verify it by calling <code>/v3/lock/list</code>.
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Refresh token (optional)</label>
+          <input type="text" class="form-control" name="fast_refresh_token"
+                 value="{{ cfg.refresh_token }}">
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-outline-success">
+            Verify &amp; save (jump to Step 5)
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- STEP 1: Choose lock username & password, hash & generate date -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Step 1 – Create lock username &amp; password (hash + date)
+    </div>
+    <div class="card-body">
+      <p>
+        First, choose a simple username for the lock account (letters and digits only, e.g. <code>higgson2025</code>)
+        and a plain text password. This step will:
+      </p>
+      <ul>
+        <li>Store the username</li>
+        <li>Generate the MD5 hash of your password (required by TTLock)</li>
+        <li>Generate the current <code>date</code> in milliseconds</li>
+      </ul>
+
+      <form method="post" action="/hash_password" class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Username (before TTLock prefix)</label>
+          <input type="text" class="form-control" name="username"
+                 value="{{ cfg.username }}">
+          <div class="form-text">
+            Example: <code>higgson2025</code> (only letters and digits).
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Plain text password</label>
+          <input type="password" class="form-control" name="plain_password">
+          <div class="form-text">
+            This is the password you will remember; it is never sent in plain text to TTLock.
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Hashed password (MD5)</label>
+          <input type="text" class="form-control"
+                 value="{{ hashed_password or cfg.password_md5 }}" readonly>
+          <div class="form-text">
+            TTLock API requires this 32-character lowercase MD5 hash.
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Last generated date (milliseconds)</label>
+          <input type="text" class="form-control"
+                 value="{{ cfg.last_date_ms }}" readonly>
+          <div class="form-text">
+            This is the <code>date</code> value, e.g. <code>1671693172157</code>.
+          </div>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-secondary">
+            Hash password &amp; generate current date
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- STEP 2: App settings / API URL -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Step 2 – Configure TTLock app &amp; API settings
+    </div>
+    <div class="card-body">
+      <p>
+        Enter your TTLock (or Sciener) app credentials here. These are from the developer portal
+        (client ID and client secret).
+      </p>
+
+      <form method="post" action="/save_settings">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">API Base URL</label>
+            <input type="text" class="form-control" name="api_base_url"
+                   value="{{ cfg.api_base_url }}">
+            <div class="form-text">
+              Default: <code>https://api.ttlock.com</code>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Redirect URI</label>
+            <input type="text" class="form-control" name="redirect_uri"
+                   value="{{ cfg.redirect_uri }}">
+            <div class="form-text">
+              Optional: e.g. your Home Assistant OAuth URL.
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label">Client ID</label>
+            <input type="text" class="form-control" name="client_id"
+                   value="{{ cfg.client_id }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Client Secret</label>
+            <input type="text" class="form-control" name="client_secret"
+                   value="{{ cfg.client_secret }}">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- STEP 3: Register user -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Step 3 – Register TTLock user (/v3/user/register)
+    </div>
+    <div class="card-body">
+      <p>
+        Use the saved username, hashed password, client ID/secret, and date to register the user with TTLock.
+        You can either:
+      </p>
+      <ul>
+        <li>Click “Register user via API” below, or</li>
+        <li>Copy the generated curl command and run it in PuTTY / shell.</li>
+      </ul>
+
+      <form method="post" action="/register_user" class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">API Base URL</label>
+          <input type="text" class="form-control" name="api_base_url" value="{{ cfg.api_base_url }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Current username (will update with TTLock prefix)</label>
+          <input type="text" class="form-control" value="{{ cfg.username }}" readonly>
+          <div class="form-text">
+            After registration, TTLock may return a username like <code>ccajg_higgson2025</code>.
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Password (MD5)</label>
+          <input type="text" class="form-control" name="password_md5" value="{{ cfg.password_md5 }}" readonly>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Date (milliseconds)</label>
+          <input type="text" class="form-control" value="{{ cfg.last_date_ms }}" readonly>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-success">Register user via API</button>
+        </div>
+      </form>
+
+      {% if register_error %}
+        <div class="alert alert-danger mt-3">{{ register_error }}</div>
+      {% endif %}
+
+      {% if cfg.raw_register_response %}
+        <div class="mt-3">
+          <label class="form-label">Raw register response</label>
+          <textarea class="form-control" rows="5" readonly>{{ cfg.raw_register_response }}</textarea>
+        </div>
+      {% endif %}
+
+      {% if curl_register_example %}
+        <div class="mt-4">
+          <label class="form-label">Generated curl example (for PuTTY / shell)</label>
+          <textarea class="form-control" rows="8" readonly>{{ curl_register_example }}</textarea>
+          <div class="form-text">
+            Example structure:<br>
+            <code>curl --location -g --request POST 'https://api.ttlock.com/v3/user/register' \</code><br>
+            <code>&nbsp;&nbsp;--header 'Content-Type: application/x-www-form-urlencoded' \</code><br>
+            <code>&nbsp;&nbsp;--data-urlencode 'clientId=...' \</code><br>
+            <code>&nbsp;&nbsp;--data-urlencode 'clientSecret=...' \</code><br>
+            <code>&nbsp;&nbsp;--data-urlencode 'username=higgson' \</code><br>
+            <code>&nbsp;&nbsp;--data-urlencode 'password=d2bb5c70cd4ac2b48e4b2891d436216f' \</code><br>
+            <code>&nbsp;&nbsp;--data-urlencode 'date=1671693172157'</code>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- STEP 4: Get access token -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Step 4 – Get access token (/oauth2/token)
+    </div>
+    <div class="card-body">
+      <p>
+        Once you have the returned TTLock username (e.g. <code>ccajg_higgson2025</code>), use this step
+        to obtain an access token for use in Home Assistant or other integrations.
+      </p>
+
+      <form method="post" action="/get_token" class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">API Base URL</label>
+          <input type="text" class="form-control" name="api_base_url" value="{{ cfg.api_base_url }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Redirect URI (optional)</label>
+          <input type="text" class="form-control" name="redirect_uri" value="{{ cfg.redirect_uri }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Username (TTLock returned)</label>
+          <input type="text" class="form-control" name="username" value="{{ cfg.username }}">
+          <div class="form-text">
+            This should be the returned username from Step 3, e.g. <code>ccajg_higgson2025</code>.
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Password (MD5)</label>
+          <input type="text" class="form-control" name="password_md5" value="{{ cfg.password_md5 }}">
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-warning">Get access token</button>
+        </div>
+      </form>
+
+      {% if token_error %}
+        <div class="alert alert-danger mt-3">{{ token_error }}</div>
+      {% endif %}
+
+      {% if cfg.access_token %}
+        <div class="mt-3">
+          <label class="form-label">Access token</label>
+          <textarea class="form-control" rows="3" readonly>{{ cfg.access_token }}</textarea>
+        </div>
+      {% endif %}
+
+      {% if cfg.refresh_token %}
+        <div class="mt-3">
+          <label class="form-label">Refresh token</label>
+          <textarea class="form-control" rows="3" readonly>{{ cfg.refresh_token }}</textarea>
+        </div>
+      {% endif %}
+
+      {% if cfg.raw_token_response %}
+        <div class="mt-3">
+          <label class="form-label">Raw token response</label>
+          <textarea class="form-control" rows="6" readonly>{{ cfg.raw_token_response }}</textarea>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
   <!-- STEP 5: Fetch locks -->
   <div class="card mb-4">
     <div class="card-header fw-bold">
@@ -5,7 +344,7 @@
     </div>
     <div class="card-body">
       <p>
-        Once you have an access token (Step 4), use this step to fetch all locks on the account.
+        Once you have an access token (Step 4 or via Shortcut), use this step to fetch all locks on the account.
       </p>
       <form method="post" action="/fetch_locks">
         <button type="submit" class="btn btn-info">Fetch locks</button>
@@ -38,9 +377,7 @@
                         ?
                       {% endif %}
                     </td>
-                    <td>
-                      <small>{{ lock }}</small>
-                    </td>
+                    <td><small>{{ lock }}</small></td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -94,3 +431,20 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- LOG PANEL -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">
+      Log – last entries
+    </div>
+    <div class="card-body">
+      <p class="form-text">
+        If something goes wrong, copy relevant lines from here and send them to me.
+      </p>
+      <textarea class="form-control" rows="10" readonly>{{ log_tail }}</textarea>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
