@@ -23,7 +23,7 @@ CONFIG_PATH = Path(os.environ.get("CONFIG_PATH", "/data/config.json"))
 LOG_PATH = Path(os.environ.get("LOG_PATH", "/data/app.log"))
 
 # --------------------------------------------------------------------
-# Logging setup
+# Logging
 # --------------------------------------------------------------------
 logger = logging.getLogger("ttlock_helper")
 logger.setLevel(logging.INFO)
@@ -55,7 +55,6 @@ def get_log_tail(lines: int = 200) -> str:
 # Config helpers
 # --------------------------------------------------------------------
 def default_config() -> dict:
-    # Default API URL is https://api.ttlock.com
     return {
         "api_base_url": "https://api.ttlock.com",
         "redirect_uri": "",
@@ -68,7 +67,7 @@ def default_config() -> dict:
         "refresh_token": "",
         "raw_register_response": "",
         "raw_token_response": "",
-        "locks": [],  # list of known locks
+        "locks": [],
         "last_lock_error": "",
         "last_lock_action_result": "",
     }
@@ -134,7 +133,7 @@ def build_curl_example(cfg: dict) -> str:
 
 
 # --------------------------------------------------------------------
-# UI routes
+# Routes – UI
 # --------------------------------------------------------------------
 @app.route("/", methods=["GET"])
 def index():
@@ -326,10 +325,8 @@ def fetch_locks_route():
     cfg = load_config()
 
     lock_error = ""
-    locks = []
-
     if not cfg.get("access_token"):
-        lock_error = "No access token available. Complete Steps 1–4 first."
+        lock_error = "No access token available. Complete Steps 1–4 or use the Shortcut."
         log_event(f"Fetch locks aborted: {lock_error}", logging.WARNING)
     else:
         log_event("Attempting to fetch lock list from TTLock")
@@ -377,7 +374,7 @@ def control_lock_route():
     result_text = ""
 
     if not cfg.get("access_token"):
-        action_error = "No access token available. Complete token step first."
+        action_error = "No access token available. Complete token step or fast setup first."
         log_event(f"Control lock aborted: {action_error}", logging.WARNING)
     elif not lock_id:
         action_error = "No lock selected."
@@ -424,13 +421,89 @@ def control_lock_route():
     )
 
 
+@app.route("/fast_setup", methods=["POST"])
+def fast_setup_route():
+    """
+    Shortcut: user already has username/password/token and wants to jump to locks.
+    """
+    cfg = load_config()
+
+    base_url = request.form.get("fast_api_base_url", "").strip() or cfg["api_base_url"]
+    username = request.form.get("fast_username", "").strip()
+    plain_password = request.form.get("fast_plain_password", "").strip()
+    password_md5 = request.form.get("fast_password_md5", "").strip()
+    access_token = request.form.get("fast_access_token", "").strip()
+    refresh_token = request.form.get("fast_refresh_token", "").strip()
+
+    cfg["api_base_url"] = base_url
+
+    if username:
+        cfg["username"] = username
+
+    # If given plain password, override MD5
+    if plain_password:
+        password_md5 = hashlib.md5(plain_password.encode("utf-8")).hexdigest()
+        log_event(f"Fast setup: generated MD5 hash for username '{cfg['username']}'")
+
+    if password_md5:
+        cfg["password_md5"] = password_md5
+
+    if access_token:
+        cfg["access_token"] = access_token
+
+    if refresh_token:
+        cfg["refresh_token"] = refresh_token
+
+    message = ""
+    error = ""
+
+    if cfg.get("access_token"):
+        log_event("Fast setup: attempting to verify access token by fetching locks")
+        try:
+            result = list_locks(
+                base_url=cfg["api_base_url"],
+                access_token=cfg["access_token"],
+            )
+            cfg["locks"] = result.get("list", [])
+            cfg["last_lock_error"] = ""
+            count = len(cfg["locks"])
+            message = f"Verification successful. Found {count} locks. You can use Step 5 & 6 now."
+            log_event(f"Fast setup verification succeeded, {count} locks found")
+        except TTLockError as e:
+            error = f"Verification failed (TTLock error): {e}"
+            cfg["last_lock_error"] = error
+            log_event(error, logging.ERROR)
+        except Exception as e:
+            error = f"Verification failed (unexpected error): {e}"
+            cfg["last_lock_error"] = error
+            log_event(error, logging.ERROR)
+    else:
+        message = "Credentials saved. Add an access token to verify and fetch locks."
+        log_event("Fast setup: saved credentials without access token (no verification)")
+
+    save_config(cfg)
+    curl_example = build_curl_example(cfg)
+    log_tail = get_log_tail()
+
+    combined_msg = error or message
+
+    return render_template(
+        "index.html",
+        cfg=cfg,
+        hashed_password=cfg.get("password_md5", ""),
+        register_error=combined_msg,
+        token_error="",
+        curl_register_example=curl_example,
+        log_tail=log_tail,
+    )
+
+
 # --------------------------------------------------------------------
-# JSON API for Home Assistant
+# JSON API for external integrations
 # --------------------------------------------------------------------
 @app.route("/api/locks", methods=["GET"])
 def api_locks():
     cfg = load_config()
-    # If we have no locks yet, try to fetch them once
     if not cfg.get("locks") and cfg.get("access_token"):
         try:
             result = list_locks(
