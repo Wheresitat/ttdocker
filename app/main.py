@@ -328,11 +328,15 @@ def fetch_locks_route():
     if not cfg.get("access_token"):
         lock_error = "No access token available. Complete Steps 1–4 or use the Shortcut."
         log_event(f"Fetch locks aborted: {lock_error}", logging.WARNING)
+    elif not cfg.get("client_id"):
+        lock_error = "No client_id configured. Complete Step 2 first."
+        log_event(f"Fetch locks aborted: {lock_error}", logging.WARNING)
     else:
         log_event("Attempting to fetch lock list from TTLock")
         try:
             result = list_locks(
                 base_url=cfg["api_base_url"],
+                client_id=cfg["client_id"],
                 access_token=cfg["access_token"],
             )
             locks = result.get("list", [])
@@ -376,6 +380,9 @@ def control_lock_route():
     if not cfg.get("access_token"):
         action_error = "No access token available. Complete token step or fast setup first."
         log_event(f"Control lock aborted: {action_error}", logging.WARNING)
+    elif not cfg.get("client_id"):
+        action_error = "No client_id configured. Complete Step 2 first."
+        log_event(f"Control lock aborted: {action_error}", logging.WARNING)
     elif not lock_id:
         action_error = "No lock selected."
         log_event(f"Control lock aborted: {action_error}", logging.WARNING)
@@ -387,6 +394,7 @@ def control_lock_route():
         try:
             result = operate_lock(
                 base_url=cfg["api_base_url"],
+                client_id=cfg["client_id"],
                 access_token=cfg["access_token"],
                 lock_id=int(lock_id),
                 action=action,
@@ -460,8 +468,11 @@ def fast_setup_route():
     if cfg.get("access_token"):
         log_event("Fast setup: attempting to verify access token by fetching locks")
         try:
+            if not cfg.get("client_id"):
+                raise TTLockError("client_id is missing. Complete Step 2 first.")
             result = list_locks(
                 base_url=cfg["api_base_url"],
+                client_id=cfg["client_id"],
                 access_token=cfg["access_token"],
             )
             cfg["locks"] = result.get("list", [])
@@ -504,10 +515,11 @@ def fast_setup_route():
 @app.route("/api/locks", methods=["GET"])
 def api_locks():
     cfg = load_config()
-    if not cfg.get("locks") and cfg.get("access_token"):
+    if not cfg.get("locks") and cfg.get("access_token") and cfg.get("client_id"):
         try:
             result = list_locks(
                 base_url=cfg["api_base_url"],
+                client_id=cfg["client_id"],
                 access_token=cfg["access_token"],
             )
             cfg["locks"] = result.get("list", [])
@@ -526,9 +538,13 @@ def api_operate_lock(lock_id: int, action: str):
     if not cfg.get("access_token"):
         return jsonify({"success": False, "error": "No access token"}), 400
 
+    if not cfg.get("client_id"):
+        return jsonify({"success": False, "error": "No client_id configured"}), 400
+
     try:
         result = operate_lock(
             base_url=cfg["api_base_url"],
+            client_id=cfg["client_id"],
             access_token=cfg["access_token"],
             lock_id=lock_id,
             action=action,
