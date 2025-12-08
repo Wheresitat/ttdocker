@@ -14,6 +14,9 @@ def _build_url(base_url: str, path: str) -> str:
 
 def register_user(base_url: str, client_id: str, client_secret: str,
                   username: str, password_md5: str) -> dict:
+    """
+    /v3/user/register
+    """
     url = _build_url(base_url, "/v3/user/register")
     now_ms = int(time.time() * 1000)
 
@@ -51,6 +54,9 @@ def register_user(base_url: str, client_id: str, client_secret: str,
 def get_access_token(base_url: str, client_id: str, client_secret: str,
                      username: str, password_md5: str,
                      redirect_uri: str | None = None) -> dict:
+    """
+    /oauth2/token (grant_type=password)
+    """
     url = _build_url(base_url, "/oauth2/token")
 
     data = {
@@ -90,9 +96,9 @@ def get_access_token(base_url: str, client_id: str, client_secret: str,
 def list_locks(base_url: str, access_token: str,
                page_no: int = 1, page_size: int = 100) -> dict:
     """
-    Fetch list of locks for this account.
+    /v3/lock/list
 
-    Returns raw JSON from TTLock, typically:
+    Returns:
     {
       "list": [
         {
@@ -141,9 +147,7 @@ def list_locks(base_url: str, access_token: str,
 def operate_lock(base_url: str, access_token: str,
                  lock_id: int, action: str) -> dict:
     """
-    Lock/unlock a lock via gateway.
-
-    action: "lock" or "unlock"
+    /v3/lock/lock or /v3/lock/unlock
     """
     action = action.lower()
     if action not in ("lock", "unlock"):
@@ -176,5 +180,4 @@ def operate_lock(base_url: str, access_token: str,
     except Exception:
         raise TTLockError(f"{action.capitalize()} failed: Non-JSON response: {resp.text}")
 
-    # TTLock returns errcode 0 or success structure; you can keep raw body.
     return body
