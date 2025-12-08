@@ -1,9 +1,11 @@
+version: "3.8"
+
 services:
   ttlock-helper:
     build: .
     container_name: ttlock-helper
     ports:
-      - "8005:8000"
+      - "8005:8000"      # UI: http://HOST:8005
     environment:
       - TZ=Australia/Sydney
       - CONFIG_PATH=/data/config.json
