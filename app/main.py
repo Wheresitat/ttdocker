@@ -6,9 +6,15 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 
-from ttlock_api import register_user, get_access_token, TTLockError
+from ttlock_api import (
+    register_user,
+    get_access_token,
+    list_locks,
+    operate_lock,
+    TTLockError,
+)
 
 app = Flask(__name__)
 app.secret_key = "change-this-secret"
@@ -62,6 +68,9 @@ def default_config() -> dict:
         "refresh_token": "",
         "raw_register_response": "",
         "raw_token_response": "",
+        "locks": [],  # list of known locks
+        "last_lock_error": "",
+        "last_lock_action_result": "",
     }
 
 
@@ -91,10 +100,6 @@ def save_config(cfg: dict) -> None:
 # Curl builder for /v3/user/register
 # --------------------------------------------------------------------
 def build_curl_example(cfg: dict) -> str:
-    """
-    Build a curl command for /v3/user/register using current config.
-    Only returns a non-empty string if all required fields are present.
-    """
     required = ["client_id", "client_secret", "username", "password_md5", "last_date_ms"]
     if not all(cfg.get(k) for k in required):
         return ""
@@ -129,7 +134,7 @@ def build_curl_example(cfg: dict) -> str:
 
 
 # --------------------------------------------------------------------
-# Routes
+# UI routes
 # --------------------------------------------------------------------
 @app.route("/", methods=["GET"])
 def index():
@@ -163,7 +168,6 @@ def hash_password_route():
         cfg["password_md5"] = hashed
         log_event(f"Generated MD5 hash for username '{cfg['username']}'")
 
-    # Generate current date in ms for use in curl / register
     now_ms = int(time.time() * 1000)
     cfg["last_date_ms"] = str(now_ms)
     log_event(f"Generated date ms: {cfg['last_date_ms']}")
@@ -187,13 +191,18 @@ def hash_password_route():
 def save_settings_route():
     cfg = load_config()
 
-    cfg["api_base_url"] = request.form.get("api_base_url", "").strip() or cfg["api_base_url"]
-    cfg["redirect_uri"] = request.form.get("redirect_uri", "").strip()
-    cfg["client_id"] = request.form.get("client_id", "").strip()
-    cfg["client_secret"] = request.form.get("client_secret", "").strip()
+    try:
+        cfg["api_base_url"] = request.form.get("api_base_url", "").strip() or cfg["api_base_url"]
+        cfg["redirect_uri"] = request.form.get("redirect_uri", "").strip()
+        cfg["client_id"] = request.form.get("client_id", "").strip()
+        cfg["client_secret"] = request.form.get("client_secret", "").strip()
 
-    save_config(cfg)
-    log_event("Settings updated (API base URL, redirect URI, client credentials)")
+        save_config(cfg)
+        log_event("Settings updated (API base URL, redirect URI, client credentials)")
+        status_msg = "Settings saved."
+    except Exception as e:
+        status_msg = f"Error saving settings: {e}"
+        log_event(status_msg, logging.ERROR)
 
     curl_example = build_curl_example(cfg)
     log_tail = get_log_tail()
@@ -202,7 +211,7 @@ def save_settings_route():
         "index.html",
         cfg=cfg,
         hashed_password="",
-        register_error="Settings saved.",
+        register_error=status_msg,
         token_error="",
         curl_register_example=curl_example,
         log_tail=log_tail,
@@ -236,7 +245,7 @@ def register_user_route():
             register_resp_raw = json.dumps(result, indent=2)
             log_event(f"User registered successfully, returned username: {cfg['username']}")
         except TTLockError as e:
-            register_error = str(e)
+            register_error = f"Register failed: {e}"
             log_event(f"TTLockError during register_user: {register_error}", logging.ERROR)
         except Exception as e:
             register_error = f"Unexpected error: {e}"
@@ -290,7 +299,7 @@ def get_token_route():
             token_resp_raw = json.dumps(result, indent=2)
             log_event("Access token retrieved successfully")
         except TTLockError as e:
-            token_error = str(e)
+            token_error = f"Token failed: {e}"
             log_event(f"TTLockError during get_access_token: {token_error}", logging.ERROR)
         except Exception as e:
             token_error = f"Unexpected error: {e}"
@@ -310,6 +319,155 @@ def get_token_route():
         curl_register_example=curl_example,
         log_tail=log_tail,
     )
+
+
+@app.route("/fetch_locks", methods=["POST"])
+def fetch_locks_route():
+    cfg = load_config()
+
+    lock_error = ""
+    locks = []
+
+    if not cfg.get("access_token"):
+        lock_error = "No access token available. Complete Steps 1–4 first."
+        log_event(f"Fetch locks aborted: {lock_error}", logging.WARNING)
+    else:
+        log_event("Attempting to fetch lock list from TTLock")
+        try:
+            result = list_locks(
+                base_url=cfg["api_base_url"],
+                access_token=cfg["access_token"],
+            )
+            locks = result.get("list", [])
+            cfg["locks"] = locks
+            cfg["last_lock_error"] = ""
+            log_event(f"Fetched {len(locks)} locks from TTLock")
+        except TTLockError as e:
+            lock_error = f"Lock list failed: {e}"
+            cfg["last_lock_error"] = lock_error
+            log_event(lock_error, logging.ERROR)
+        except Exception as e:
+            lock_error = f"Unexpected error: {e}"
+            cfg["last_lock_error"] = lock_error
+            log_event(lock_error, logging.ERROR)
+
+    save_config(cfg)
+    curl_example = build_curl_example(cfg)
+    log_tail = get_log_tail()
+
+    return render_template(
+        "index.html",
+        cfg=cfg,
+        hashed_password=cfg.get("password_md5", ""),
+        register_error=lock_error,
+        token_error="",
+        curl_register_example=curl_example,
+        log_tail=log_tail,
+    )
+
+
+@app.route("/control_lock", methods=["POST"])
+def control_lock_route():
+    cfg = load_config()
+
+    lock_id = request.form.get("lock_id", "").strip()
+    action = request.form.get("action", "").strip().lower()
+
+    action_error = ""
+    result_text = ""
+
+    if not cfg.get("access_token"):
+        action_error = "No access token available. Complete token step first."
+        log_event(f"Control lock aborted: {action_error}", logging.WARNING)
+    elif not lock_id:
+        action_error = "No lock selected."
+        log_event(f"Control lock aborted: {action_error}", logging.WARNING)
+    elif action not in ("lock", "unlock"):
+        action_error = f"Invalid action '{action}'."
+        log_event(f"Control lock aborted: {action_error}", logging.WARNING)
+    else:
+        log_event(f"Attempting to {action} lock {lock_id}")
+        try:
+            result = operate_lock(
+                base_url=cfg["api_base_url"],
+                access_token=cfg["access_token"],
+                lock_id=int(lock_id),
+                action=action,
+            )
+            result_text = json.dumps(result, indent=2)
+            action_error = ""
+            log_event(f"{action.capitalize()} command sent successfully for lock {lock_id}")
+        except TTLockError as e:
+            action_error = f"{action.capitalize()} failed: {e}"
+            result_text = ""
+            log_event(action_error, logging.ERROR)
+        except Exception as e:
+            action_error = f"Unexpected error: {e}"
+            result_text = ""
+            log_event(action_error, logging.ERROR)
+
+    cfg["last_lock_error"] = action_error
+    cfg["last_lock_action_result"] = result_text
+    save_config(cfg)
+
+    curl_example = build_curl_example(cfg)
+    log_tail = get_log_tail()
+
+    return render_template(
+        "index.html",
+        cfg=cfg,
+        hashed_password=cfg.get("password_md5", ""),
+        register_error=action_error,
+        token_error="",
+        curl_register_example=curl_example,
+        log_tail=log_tail,
+    )
+
+
+# --------------------------------------------------------------------
+# JSON API for Home Assistant
+# --------------------------------------------------------------------
+@app.route("/api/locks", methods=["GET"])
+def api_locks():
+    cfg = load_config()
+    # If we have no locks yet, try to fetch them once
+    if not cfg.get("locks") and cfg.get("access_token"):
+        try:
+            result = list_locks(
+                base_url=cfg["api_base_url"],
+                access_token=cfg["access_token"],
+            )
+            cfg["locks"] = result.get("list", [])
+            save_config(cfg)
+            log_event(f"/api/locks auto-fetched {len(cfg['locks'])} locks")
+        except Exception as e:
+            log_event(f"/api/locks error fetching locks: {e}", logging.ERROR)
+
+    return jsonify({"locks": cfg.get("locks", [])})
+
+
+@app.route("/api/locks/<int:lock_id>/<action>", methods=["POST"])
+def api_operate_lock(lock_id: int, action: str):
+    cfg = load_config()
+
+    if not cfg.get("access_token"):
+        return jsonify({"success": False, "error": "No access token"}), 400
+
+    try:
+        result = operate_lock(
+            base_url=cfg["api_base_url"],
+            access_token=cfg["access_token"],
+            lock_id=lock_id,
+            action=action,
+        )
+        log_event(f"/api/locks/{lock_id}/{action} succeeded")
+        return jsonify({"success": True, "result": result})
+    except TTLockError as e:
+        log_event(f"/api/locks/{lock_id}/{action} TTLockError: {e}", logging.ERROR)
+        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception as e:
+        log_event(f"/api/locks/{lock_id}/{action} unexpected error: {e}", logging.ERROR)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":
