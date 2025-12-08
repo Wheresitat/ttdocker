@@ -10,7 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ /app/
 
-# Config file goes to /data (mapped via volume)
 RUN mkdir -p /data
 
 EXPOSE 8000
