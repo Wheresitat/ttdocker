@@ -1,0 +1,11 @@
+{
+  "domain": "ttlock_helper",
+  "name": "TTLock Helper",
+  "version": "0.1.0",
+  "documentation": "https://github.com/your/repo",
+  "issue_tracker": "https://github.com/your/repo/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@yourgithub"],
+  "config_flow": true
+}
