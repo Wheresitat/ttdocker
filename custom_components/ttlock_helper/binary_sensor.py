@@ -24,7 +24,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up TTLock gateway presence binary sensors from a config entry."""
+    """Set up TTLock gateway binary sensors from a config entry."""
     coordinator: TTLockCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities: list[TTLockGatewayBinarySensor] = []
@@ -35,12 +35,12 @@ async def async_setup_entry(
             continue
         entities.append(TTLockGatewayBinarySensor(coordinator, entry.entry_id, lock_id))
 
-    _LOGGER.debug("Adding %d TTLock gateway binary sensors", len(entities))
+    _LOGGER.debug("Adding %d TTLock gateway sensors", len(entities))
     async_add_entities(entities)
 
 
 class TTLockGatewayBinarySensor(CoordinatorEntity[TTLockCoordinator], BinarySensorEntity):
-    """Binary sensor that shows if a lock has a TTLock gateway attached."""
+    """Binary sensor indicating if lock has a gateway configured."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
@@ -65,14 +65,13 @@ class TTLockGatewayBinarySensor(CoordinatorEntity[TTLockCoordinator], BinarySens
     @property
     def name(self) -> str | None:
         data = self._lock_data
-        base_name = "TTLock"
+        base = "TTLock"
         if data:
-            base_name = data.get("lockAlias") or base_name
-        return f"{base_name} Gateway"
+            base = data.get("lockAlias") or base
+        return f"{base} Gateway"
 
     @property
     def is_on(self) -> bool | None:
-        """Return True if the lock reports hasGateway=1."""
         data = self._lock_data
         if not data:
             return None
