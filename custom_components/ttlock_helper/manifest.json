@@ -1,12 +1,14 @@
 {
   "domain": "ttlock_helper",
   "name": "TTLock Helper",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "documentation": "https://github.com/youruser/yourrepo",
   "issue_tracker": "https://github.com/youruser/yourrepo/issues",
   "requirements": [],
   "dependencies": [],
   "codeowners": ["@youruser"],
   "config_flow": true,
-  "iot_class": "cloud_polling"
+  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "loggers": ["custom_components.ttlock_helper"]
 }
