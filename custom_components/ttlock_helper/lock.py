@@ -51,12 +51,10 @@ class TTLockLockEntity(CoordinatorEntity[TTLockCoordinator], LockEntity):
         self._entry_id = entry_id
         self._lock_id = lock_id
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{lock_id}"
-        # We don't get real state from TTLock, we track last-known (optimistic)
         self._attr_assumed_state = True
 
     @property
     def _lock_data(self) -> dict[str, Any] | None:
-        """Return the lock dict from coordinator.data."""
         for lock in self.coordinator.data:
             if lock.get("lockId") == self._lock_id:
                 return lock
@@ -83,11 +81,6 @@ class TTLockLockEntity(CoordinatorEntity[TTLockCoordinator], LockEntity):
 
     @property
     def is_locked(self) -> bool | None:
-        """Return last-known lock state.
-
-        The helper stores an 'isLocked' flag when a lock/unlock command succeeds.
-        If it's missing, we report unknown.
-        """
         data = self._lock_data
         if not data:
             return None
@@ -97,14 +90,12 @@ class TTLockLockEntity(CoordinatorEntity[TTLockCoordinator], LockEntity):
             return None
         return bool(state)
 
-    async def async_lock(self, **kwargs: Any) -> None:
+    async def async_lock(self, **kwargs):
         _LOGGER.debug("Locking TTLock %s", self._lock_id)
         await self.coordinator.async_lock_action(self._lock_id, "lock")
-        # After a successful command, coordinator will see updated isLocked
         await self.coordinator.async_request_refresh()
 
-    async def async_unlock(self, **kwargs: Any) -> None:
+    async def async_unlock(self, **kwargs):
         _LOGGER.debug("Unlocking TTLock %s", self._lock_id)
         await self.coordinator.async_lock_action(self._lock_id, "unlock")
-        # After a successful command, coordinator will see updated isLocked
         await self.coordinator.async_request_refresh()
