@@ -1,0 +1,9 @@
+{
+  "name": "TTLock Helper",
+  "domain": "ttlock_helper",
+  "country": "AU",
+  "homeassistant": "2024.0.0",
+  "render_readme": true,
+  "content_in_root": false,
+  "filename": "README.md"
+}
