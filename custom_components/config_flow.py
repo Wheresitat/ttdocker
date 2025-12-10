@@ -14,12 +14,16 @@ class TTLockHelperConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input=None) -> FlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
+        """Handle the initial step."""
         if user_input is not None:
             # Only one instance
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title="TTLock Helper", data=user_input)
+            return self.async_create_entry(
+                title="TTLock Helper",
+                data=user_input,
+            )
 
         schema = vol.Schema(
             {
@@ -27,4 +31,7 @@ class TTLockHelperConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=schema,
+        )
