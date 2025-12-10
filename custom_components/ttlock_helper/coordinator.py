@@ -64,10 +64,7 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
         """
         Send lock/unlock command via helper.
 
-        We intentionally do NOT raise UpdateFailed here (that's for polling).
-        Instead we:
-        - Treat any 2xx result as success.
-        - Raise HomeAssistantError only on real HTTP problems.
+        Treat any 2xx as success; only raise on real errors.
         """
         action = action.lower()
         if action not in ("lock", "unlock"):
@@ -83,7 +80,6 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
                 async with session.post(url) as resp:
                     text = await resp.text()
                     if resp.status < 200 or resp.status >= 300:
-                        # Real error from helper – surface to HA
                         _LOGGER.error(
                             "HTTP %s when calling %s for lock %s: %s",
                             resp.status,
@@ -95,7 +91,6 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
                             f"TTLock helper HTTP {resp.status}: {text}"
                         )
 
-                    # Try to parse JSON, but don't fail the action if shape is unexpected.
                     try:
                         data = await resp.json()
                         _LOGGER.debug(
@@ -105,7 +100,6 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
                             data,
                         )
                     except Exception:
-                        # Not fatal – the lock already acted if status was 2xx.
                         _LOGGER.debug(
                             "TTLock helper %s for lock %s returned non-JSON: %s",
                             action,
@@ -114,10 +108,8 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
                         )
 
         except HomeAssistantError:
-            # Already logged, re-raise clean HA error
             raise
         except Exception as err:
-            # Generic network/timeout/other failure
             _LOGGER.error(
                 "Error when sending %s command to TTLock helper for lock %s: %s",
                 action,
