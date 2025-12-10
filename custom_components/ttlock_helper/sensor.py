@@ -89,13 +89,12 @@ class TTLockBatterySensor(CoordinatorEntity[TTLockCoordinator], SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        data = self._lock_data or {}
-        model = data.get("modelNum") or "TTLock"
-        manufacturer = "TTLock"
-        base_name = data.get("lockAlias") or f"TTLock {self._lock_id}"
+        """Attach battery sensor to the same device as the lock/helper."""
+        # Use the config entry id as the device identifier so it groups
+        # with the existing TTLock Helper device (and the lock entity).
         return DeviceInfo(
-            identifiers={(DOMAIN, str(self._lock_id))},
-            name=base_name,
-            manufacturer=manufacturer,
-            model=model,
+            identifiers={(DOMAIN, self._entry_id)},
+            name="TTLock Helper",
+            manufacturer="TTLock",
+            model="TTLock Cloud",
         )
