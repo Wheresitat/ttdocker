@@ -11,11 +11,11 @@ from .coordinator import TTLockCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = ["lock"]
+PLATFORMS: list[str] = ["lock", "sensor", "binary_sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up TTLock Helper via YAML (not used, config flow only)."""
+    """Set up TTLock Helper via YAML (not used)."""
     return True
 
 
