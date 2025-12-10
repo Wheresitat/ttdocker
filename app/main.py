@@ -95,6 +95,25 @@ def save_config(cfg: dict) -> None:
         json.dump(cfg, f, indent=2)
 
 
+def update_lock_state(cfg: dict, lock_id: int, is_locked: bool) -> None:
+    """Set isLocked flag for a given lockId in cfg['locks']."""
+    updated = False
+    for lock in cfg.get("locks", []):
+        # lockId may be stored as int or string; normalise
+        lid = lock.get("lockId")
+        if str(lid) == str(lock_id):
+            lock["isLocked"] = bool(is_locked)
+            updated = True
+            break
+    if updated:
+        log_event(f"Updated isLocked state for lock {lock_id} to {is_locked}")
+    else:
+        log_event(
+            f"Tried to update isLocked for lock {lock_id}, but it was not found in cfg['locks']",
+            logging.DEBUG,
+        )
+
+
 # --------------------------------------------------------------------
 # Curl builder for /v3/user/register
 # --------------------------------------------------------------------
@@ -340,6 +359,8 @@ def fetch_locks_route():
                 access_token=cfg["access_token"],
             )
             locks = result.get("list", [])
+            # We deliberately overwrite lock metadata, but isLocked will be re-set
+            # after next lock/unlock command.
             cfg["locks"] = locks
             cfg["last_lock_error"] = ""
             log_event(f"Fetched {len(locks)} locks from TTLock")
@@ -401,6 +422,8 @@ def control_lock_route():
             )
             result_text = json.dumps(result, indent=2)
             action_error = ""
+            # Optimistic state: assume the lock obeyed the command
+            update_lock_state(cfg, int(lock_id), is_locked=(action == "lock"))
             log_event(f"{action.capitalize()} command sent successfully for lock {lock_id}")
         except TTLockError as e:
             action_error = f"{action.capitalize()} failed: {e}"
@@ -549,6 +572,9 @@ def api_operate_lock(lock_id: int, action: str):
             lock_id=lock_id,
             action=action,
         )
+        # Update optimistic state
+        update_lock_state(cfg, lock_id, is_locked=(action == "lock"))
+        save_config(cfg)
         log_event(f"/api/locks/{lock_id}/{action} succeeded")
         return jsonify({"success": True, "result": result})
     except TTLockError as e:
