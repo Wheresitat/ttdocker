@@ -42,7 +42,7 @@ async def async_setup_entry(
 
 
 class TTLockBatterySensor(CoordinatorEntity[TTLockCoordinator], SensorEntity):
-    """Battery level sensor for a TTLock device."""
+    """Battery level sensor for TTLock."""
 
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = PERCENTAGE
@@ -69,17 +69,16 @@ class TTLockBatterySensor(CoordinatorEntity[TTLockCoordinator], SensorEntity):
     @property
     def name(self) -> str | None:
         data = self._lock_data
-        base_name = "TTLock"
+        base = "TTLock"
         if data:
-            base_name = data.get("lockAlias") or base_name
-        return f"{base_name} Battery"
+            base = data.get("lockAlias") or base
+        return f"{base} Battery"
 
     @property
     def native_value(self) -> int | None:
         data = self._lock_data
         if not data:
             return None
-        # electricQuantity is documented as 0–100
         value = data.get("electricQuantity")
         if value is None:
             return None
@@ -90,7 +89,6 @@ class TTLockBatterySensor(CoordinatorEntity[TTLockCoordinator], SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        # Match the same device_info as the lock entity so they are grouped.
         data = self._lock_data or {}
         model = data.get("modelNum") or "TTLock"
         manufacturer = "TTLock"
