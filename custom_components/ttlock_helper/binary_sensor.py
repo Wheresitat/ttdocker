@@ -39,7 +39,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TTLockGatewayBinarySensor(CoordinatorEntity[TTLockCoordinator], BinarySensorEntity):
+class TTLockGatewayBinarySensor(
+    CoordinatorEntity[TTLockCoordinator], BinarySensorEntity
+):
     """Binary sensor indicating if lock has a gateway configured."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
@@ -85,13 +87,10 @@ class TTLockGatewayBinarySensor(CoordinatorEntity[TTLockCoordinator], BinarySens
 
     @property
     def device_info(self) -> DeviceInfo:
-        data = self._lock_data or {}
-        model = data.get("modelNum") or "TTLock"
-        manufacturer = "TTLock"
-        base_name = data.get("lockAlias") or f"TTLock {self._lock_id}"
+        """Attach gateway sensor to the same device as the lock/helper."""
         return DeviceInfo(
-            identifiers={(DOMAIN, str(self._lock_id))},
-            name=base_name,
-            manufacturer=manufacturer,
-            model=model,
+            identifiers={(DOMAIN, self._entry_id)},
+            name="TTLock Helper",
+            manufacturer="TTLock",
+            model="TTLock Cloud",
         )
