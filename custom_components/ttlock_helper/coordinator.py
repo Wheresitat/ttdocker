@@ -52,6 +52,8 @@ class TTLockCoordinator(DataUpdateCoordinator[list[dict]]):
 
         locks = data.get("locks", [])
         _LOGGER.debug("Got %d locks from helper", len(locks))
+        # Expected shape includes:
+        #   lockId, lockAlias, electricQuantity, hasGateway, etc.
         return locks
 
     async def async_lock_action(self, lock_id: int, action: str) -> None:
