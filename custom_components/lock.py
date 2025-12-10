@@ -34,6 +34,7 @@ async def async_setup_entry(
             continue
         entities.append(TTLockLockEntity(coordinator, entry.entry_id, lock_id))
 
+    _LOGGER.debug("Adding %d TTLock lock entities", len(entities))
     async_add_entities(entities)
 
 
@@ -50,6 +51,8 @@ class TTLockLockEntity(CoordinatorEntity[TTLockCoordinator], LockEntity):
         self._entry_id = entry_id
         self._lock_id = lock_id
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{lock_id}"
+        # We don't get real state from TTLock, we track last-known (optimistic)
+        self._attr_assumed_state = True
 
     @property
     def _lock_data(self) -> dict[str, Any] | None:
@@ -80,23 +83,26 @@ class TTLockLockEntity(CoordinatorEntity[TTLockCoordinator], LockEntity):
 
     @property
     def is_locked(self) -> bool | None:
-        """Return the current lock state if available.
+        """Return last-known lock state.
 
-        Many TTLock APIs return some kind of state; we default to unknown.
+        The helper stores an 'isLocked' flag when a lock/unlock command succeeds.
+        If it's missing, we report unknown.
         """
         data = self._lock_data
         if not data:
             return None
 
-        # If TTLock included a 'lockState' or similar, you can map it here.
-        # This is optimistic for now (we don't have live state from cloud).
-        # So we'll just return None and let HA treat it as unknown.
-        return None
+        state = data.get("isLocked")
+        if state is None:
+            return None
+        return bool(state)
 
     async def async_lock(self, **kwargs: Any) -> None:
+        _LOGGER.debug("Locking TTLock %s", self._lock_id)
         await self.coordinator.async_lock_action(self._lock_id, "lock")
         await self.coordinator.async_request_refresh()
 
     async def async_unlock(self, **kwargs: Any) -> None:
+        _LOGGER.debug("Unlocking TTLock %s", self._lock_id)
         await self.coordinator.async_lock_action(self._lock_id, "unlock")
         await self.coordinator.async_request_refresh()
